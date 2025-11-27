@@ -1,5 +1,5 @@
 {
-  "name": "formula-engine",
+  "name": "@the-trybe/formula-engine",
   "version": "1.0.0",
   "description": "Configuration-driven expression evaluation system with dependency resolution and decimal precision",
   "main": "dist/index.js",

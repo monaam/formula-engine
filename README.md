@@ -16,13 +16,13 @@ A configuration-driven expression evaluation system with automatic dependency re
 ## Installation
 
 ```bash
-npm install
+npm install @the-trybe/formula-engine
 ```
 
 ## Quick Start
 
 ```typescript
-import { FormulaEngine } from 'formula-engine';
+import { FormulaEngine } from '@the-trybe/formula-engine';
 
 const engine = new FormulaEngine();
 
