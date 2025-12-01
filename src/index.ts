@@ -1,6 +1,22 @@
 // Main exports
 export { FormulaEngine } from './formula-engine';
 
+// Validator
+export {
+  Validator,
+  ValidationBuilder,
+  validate,
+  ValidationRuleType,
+  ValidationRule,
+  RequiredRule,
+  RangeRule,
+  PatternRule,
+  CustomRule,
+  CrossFieldRule,
+  ValidationError,
+  ValidationResult as ValidatorResult,
+} from './validator';
+
 // Types
 export {
   // Configuration
