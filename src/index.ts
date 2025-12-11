@@ -19,6 +19,7 @@ export {
   // Results
   EvaluationResult,
   EvaluationResultSet,
+  EvaluateAllOptions,
   ValidationResult,
   CacheStats,
 

@@ -88,6 +88,118 @@ const results = engine.evaluateAll(formulas, context);
 console.log(results.results.get('total')?.value.toString()); // "540"
 ```
 
+### Formula Definition Options
+
+Each formula in `evaluateAll()` supports additional configuration options:
+
+```typescript
+interface FormulaDefinition {
+  id: string;                    // Unique identifier for the formula
+  expression: string;            // The expression to evaluate
+  dependencies?: string[];       // Explicit dependencies (auto-detected if omitted)
+  rounding?: RoundingConfig;     // Rounding configuration for the result
+  onError?: ErrorBehavior;       // How to handle evaluation errors
+  defaultValue?: unknown;        // Default value when using onError: 'DEFAULT'
+  metadata?: Record<string, unknown>;  // Custom metadata (not used by engine)
+}
+```
+
+#### Default Intermediate Rounding
+
+For financial calculations, configure `defaultRounding` in the engine to automatically round all intermediate values in `evaluateAll()`:
+
+```typescript
+const engine = new FormulaEngine({
+  defaultRounding: { mode: 'HALF_UP', precision: 2 }
+});
+
+const formulas = [
+  { id: 'subtotal', expression: '$quantity * $unitPrice' },
+  { id: 'tax', expression: '$subtotal * 0.0825' },  // Uses rounded subtotal
+  { id: 'total', expression: '$subtotal + $tax' },
+];
+
+const results = engine.evaluateAll(formulas, {
+  variables: { quantity: 3, unitPrice: 10.33 }
+});
+
+// subtotal = 30.99 (auto-rounded)
+// tax = 2.56 (auto-rounded, calculated from rounded subtotal)
+// total = 33.55
+```
+
+This ensures intermediate values are rounded before being used in dependent formulas, which is critical for financial/accounting calculations.
+
+#### Disabling Intermediate Rounding
+
+To disable the default intermediate rounding for specific batch evaluations, use the `disableIntermediateRounding` option:
+
+```typescript
+const results = engine.evaluateAll(formulas, context, {
+  disableIntermediateRounding: true
+});
+// Raw unrounded values will propagate through dependencies
+```
+
+#### Per-Formula Rounding Override
+
+Individual formulas can override the default rounding with their own `rounding` configuration:
+
+```typescript
+const engine = new FormulaEngine({
+  defaultRounding: { mode: 'HALF_UP', precision: 2 }
+});
+
+const formulas = [
+  // Override: use 4 decimal places for exchange rate
+  { id: 'rate', expression: '1 / 3', rounding: { mode: 'HALF_UP', precision: 4 } },
+  // Uses default 2 decimal rounding
+  { id: 'amount', expression: '1000 * $rate' },
+];
+
+const results = engine.evaluateAll(formulas, { variables: {} });
+// rate = 0.3333 (4 decimals from per-formula config)
+// amount = 333.30 (2 decimals from default config)
+```
+
+**Rounding Modes:**
+- `HALF_UP` - Round towards nearest neighbor, ties round up (standard rounding)
+- `HALF_DOWN` - Round towards nearest neighbor, ties round down
+- `FLOOR` - Round towards negative infinity
+- `CEIL` - Round towards positive infinity
+- `NONE` - No rounding applied
+
+#### Error Handling Behavior
+
+Control how errors are handled during batch evaluation:
+
+```typescript
+const formulas = [
+  {
+    id: 'ratio',
+    expression: '$a / $b',
+    onError: { type: 'ZERO' }  // Return 0 on division by zero
+  },
+  {
+    id: 'result',
+    expression: '$ratio * 100',  // Can continue with 0
+  },
+];
+
+const results = engine.evaluateAll(formulas, {
+  variables: { a: 10, b: 0 }
+});
+// ratio = 0 (instead of error)
+// result = 0
+```
+
+**Error Behavior Types:**
+- `THROW` - Propagate the error (default)
+- `NULL` - Use `null` as the result
+- `ZERO` - Use `0` as the result
+- `DEFAULT` - Use `defaultValue` from the formula definition
+- `SKIP` - Skip this formula (result is `undefined`)
+
 ### Decimal Precision
 
 JavaScript floating-point math has precision issues:
@@ -296,6 +408,14 @@ const engine = new FormulaEngine({
     divisionScale: 10,       // Decimal places for division
   },
 
+  // Default rounding for evaluateAll() intermediate values
+  // When set, all formula results in batch evaluation are rounded
+  // before being used in dependent formulas
+  defaultRounding: {
+    mode: 'HALF_UP',         // Rounding mode
+    precision: 2,            // Decimal places (e.g., 2 for currency)
+  },
+
   // Security limits
   security: {
     maxExpressionLength: 10000,
@@ -349,8 +469,8 @@ class FormulaEngine {
   // Evaluate single expression
   evaluate(expression: string, context: EvaluationContext): EvaluationResult;
 
-  // Evaluate all formulas in order
-  evaluateAll(formulas: FormulaDefinition[], context: EvaluationContext): EvaluationResultSet;
+  // Evaluate all formulas in order (with optional rounding options)
+  evaluateAll(formulas: FormulaDefinition[], context: EvaluationContext, options?: EvaluateAllOptions): EvaluationResultSet;
 
   // Register custom function
   registerFunction(definition: FunctionDefinition): void;
