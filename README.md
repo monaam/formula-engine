@@ -88,6 +88,94 @@ const results = engine.evaluateAll(formulas, context);
 console.log(results.results.get('total')?.value.toString()); // "540"
 ```
 
+### Formula Definition Options
+
+Each formula in `evaluateAll()` supports additional configuration options:
+
+```typescript
+interface FormulaDefinition {
+  id: string;                    // Unique identifier for the formula
+  expression: string;            // The expression to evaluate
+  dependencies?: string[];       // Explicit dependencies (auto-detected if omitted)
+  rounding?: RoundingConfig;     // Rounding configuration for the result
+  onError?: ErrorBehavior;       // How to handle evaluation errors
+  defaultValue?: unknown;        // Default value when using onError: 'DEFAULT'
+  metadata?: Record<string, unknown>;  // Custom metadata (not used by engine)
+}
+```
+
+#### Per-Formula Rounding
+
+For financial calculations where intermediate values must be rounded before being used in dependent formulas, use the `rounding` option:
+
+```typescript
+const formulas = [
+  {
+    id: 'subtotal',
+    expression: '$quantity * $unitPrice',
+    rounding: { mode: 'HALF_UP', precision: 2 }
+  },
+  {
+    id: 'tax',
+    expression: '$subtotal * 0.0825',  // Uses rounded subtotal
+    rounding: { mode: 'HALF_UP', precision: 2 }
+  },
+  {
+    id: 'total',
+    expression: '$subtotal + $tax',
+    rounding: { mode: 'HALF_UP', precision: 2 }
+  },
+];
+
+const results = engine.evaluateAll(formulas, {
+  variables: { quantity: 3, unitPrice: 10.33 }
+});
+
+// subtotal = 30.99 (rounded from 30.99)
+// tax = 2.56 (rounded from 2.556675)
+// total = 33.55
+```
+
+**Rounding Modes:**
+- `HALF_UP` - Round towards nearest neighbor, ties round up (standard rounding)
+- `HALF_DOWN` - Round towards nearest neighbor, ties round down
+- `FLOOR` - Round towards negative infinity
+- `CEIL` - Round towards positive infinity
+- `NONE` - No rounding applied
+
+> **Note:** Without per-formula rounding, raw unrounded values propagate through the dependency chain. This can cause small discrepancies in financial calculations where each intermediate value should be rounded to cents before use.
+
+#### Error Handling Behavior
+
+Control how errors are handled during batch evaluation:
+
+```typescript
+const formulas = [
+  {
+    id: 'ratio',
+    expression: '$a / $b',
+    onError: { type: 'ZERO' }  // Return 0 on division by zero
+  },
+  {
+    id: 'result',
+    expression: '$ratio * 100',  // Can continue with 0
+  },
+];
+
+const results = engine.evaluateAll(formulas, {
+  variables: { a: 10, b: 0 }
+});
+// ratio = 0 (instead of error)
+// result = 0
+```
+
+**Error Behavior Types:**
+- `THROW` - Propagate the error (default)
+- `NULL` - Use `null` as the result
+- `ZERO` - Use `0` as the result
+- `DEFAULT` - Use `defaultValue` from the formula definition
+- `SKIP` - Skip this formula (result is `undefined`)
+
 ### Decimal Precision
 
 JavaScript floating-point math has precision issues:
