@@ -212,92 +212,196 @@ describe('evaluateAll() Intermediate Value Rounding', () => {
     });
   });
 
-  describe('Expected Behavior - Global Intermediate Rounding (Feature Request)', () => {
-    /**
-     * These tests document the DESIRED behavior for the feature request.
-     * They are currently skipped because the feature doesn't exist yet.
-     *
-     * Proposed API options:
-     *
-     * Option A: roundIntermediate callback
-     * ```
-     * engine.evaluateAll(formulas, context, {
-     *   roundIntermediate: (value: number) =>
-     *     new Decimal(value).toDecimalPlaces(2, ROUND_HALF_UP).toNumber()
-     * });
-     * ```
-     *
-     * Option B: onFormulaEvaluated callback
-     * ```
-     * engine.evaluateAll(formulas, context, {
-     *   onFormulaEvaluated: (id, result, context) => {
-     *     const rounded = round(result);
-     *     context[id] = rounded;
-     *     return rounded;
-     *   }
-     * });
-     * ```
-     *
-     * Option C: intermediateRounding config
-     * ```
-     * engine.evaluateAll(formulas, context, {
-     *   intermediateRounding: { mode: 'HALF_UP', precision: 2 }
-     * });
-     * ```
-     */
+  describe('Default Rounding Configuration', () => {
+    it('should apply defaultRounding to all intermediate values when configured', () => {
+      const engineWithRounding = new FormulaEngine({
+        defaultRounding: { mode: 'HALF_UP', precision: 2 }
+      });
 
-    it.skip('should apply roundIntermediate callback to all formula results', () => {
       const formulas: FormulaDefinition[] = [
         { id: '_discount1', expression: '127.5 * 0.15' },
         { id: '_discountTotal', expression: '$_discount1' },
         { id: 'totalHt', expression: '127.5 - $_discountTotal' },
       ];
 
-      // Proposed API - does not exist yet
-      // const results = engine.evaluateAll(formulas, { variables: {} }, {
-      //   roundIntermediate: (value: Decimal) =>
-      //     value.toDecimalPlaces(2, Decimal.ROUND_HALF_UP)
-      // });
+      const results = engineWithRounding.evaluateAll(formulas, { variables: {} });
 
-      // Expected results with intermediate rounding:
-      // expect((results.results.get('_discount1')?.value as Decimal).toNumber()).toBe(19.13);
-      // expect((results.results.get('_discountTotal')?.value as Decimal).toNumber()).toBe(19.13);
-      // expect((results.results.get('totalHt')?.value as Decimal).toNumber()).toBe(108.37);
+      expect(results.success).toBe(true);
+      // All values should be rounded to 2 decimal places
+      expect((results.results.get('_discount1')?.value as Decimal).toNumber()).toBe(19.13);
+      expect((results.results.get('_discountTotal')?.value as Decimal).toNumber()).toBe(19.13);
+      expect((results.results.get('totalHt')?.value as Decimal).toNumber()).toBe(108.37);
     });
 
-    it.skip('should support intermediateRounding config option', () => {
+    it('should apply defaultRounding to tax calculations', () => {
+      const engineWithRounding = new FormulaEngine({
+        defaultRounding: { mode: 'HALF_UP', precision: 2 }
+      });
+
       const formulas: FormulaDefinition[] = [
         { id: 'line1_tax', expression: '30.99 * 0.0825' },
         { id: 'line2_tax', expression: '39.69 * 0.0825' },
         { id: 'totalTax', expression: '$line1_tax + $line2_tax' },
       ];
 
-      // Proposed API - does not exist yet
-      // const results = engine.evaluateAll(formulas, { variables: {} }, {
-      //   intermediateRounding: { mode: 'HALF_UP', precision: 2 }
-      // });
+      const results = engineWithRounding.evaluateAll(formulas, { variables: {} });
 
-      // Expected results:
-      // expect((results.results.get('line1_tax')?.value as Decimal).toNumber()).toBe(2.56);
-      // expect((results.results.get('line2_tax')?.value as Decimal).toNumber()).toBe(3.27);
-      // expect((results.results.get('totalTax')?.value as Decimal).toNumber()).toBe(5.83);
+      expect(results.success).toBe(true);
+      expect((results.results.get('line1_tax')?.value as Decimal).toNumber()).toBe(2.56);
+      expect((results.results.get('line2_tax')?.value as Decimal).toNumber()).toBe(3.27);
+      expect((results.results.get('totalTax')?.value as Decimal).toNumber()).toBe(5.83);
     });
 
-    it.skip('should allow per-formula override of global intermediate rounding', () => {
-      // Some formulas might need different precision (e.g., exchange rates need 4 decimals)
+    it('should allow per-formula override of defaultRounding', () => {
+      const engineWithRounding = new FormulaEngine({
+        defaultRounding: { mode: 'HALF_UP', precision: 2 }
+      });
+
+      // Use 1/3 which is 0.3333... to clearly show precision difference
+      // At 4 decimals: 0.3333, at 2 decimals: 0.33
       const formulas: FormulaDefinition[] = [
-        { id: 'exchangeRate', expression: '1 / 1.2345', rounding: { mode: 'HALF_UP', precision: 4 } },
-        { id: 'convertedAmount', expression: '100 * $exchangeRate' }, // Uses global 2 decimal rounding
-        { id: 'tax', expression: '$convertedAmount * 0.0825' },
+        { id: 'rate', expression: '1 / 3', rounding: { mode: 'HALF_UP', precision: 4 } },
+        { id: 'amount', expression: '1000 * $rate' }, // Uses default 2 decimal rounding
       ];
 
-      // Proposed API - does not exist yet
-      // const results = engine.evaluateAll(formulas, { variables: {} }, {
-      //   intermediateRounding: { mode: 'HALF_UP', precision: 2 }
-      // });
+      const results = engineWithRounding.evaluateAll(formulas, { variables: {} });
 
-      // Expected: formula-level rounding overrides global
-      // expect((results.results.get('exchangeRate')?.value as Decimal).toNumber()).toBe(0.8101);
+      expect(results.success).toBe(true);
+      // Per-formula rounding to 4 decimals: 1/3 = 0.3333
+      expect((results.results.get('rate')?.value as Decimal).toNumber()).toBe(0.3333);
+      // amount = 1000 * 0.3333 = 333.3, rounded to 2 decimals = 333.30
+      // If default rounding was applied to rate (0.33), amount would be 330
+      expect((results.results.get('amount')?.value as Decimal).toNumber()).toBe(333.3);
+    });
+
+    it('should disable intermediate rounding with disableIntermediateRounding option', () => {
+      const engineWithRounding = new FormulaEngine({
+        defaultRounding: { mode: 'HALF_UP', precision: 2 }
+      });
+
+      const formulas: FormulaDefinition[] = [
+        { id: '_discount1', expression: '127.5 * 0.15' },
+        { id: '_discountTotal', expression: '$_discount1' },
+        { id: 'totalHt', expression: '127.5 - $_discountTotal' },
+      ];
+
+      // Disable intermediate rounding
+      const results = engineWithRounding.evaluateAll(formulas, { variables: {} }, {
+        disableIntermediateRounding: true
+      });
+
+      expect(results.success).toBe(true);
+      // Raw unrounded values should propagate (like the original behavior)
+      expect((results.results.get('_discount1')?.value as Decimal).toNumber()).toBe(19.125);
+      expect((results.results.get('_discountTotal')?.value as Decimal).toNumber()).toBe(19.125);
+      expect((results.results.get('totalHt')?.value as Decimal).toNumber()).toBe(108.375);
+    });
+
+    it('should still apply per-formula rounding when disableIntermediateRounding is true', () => {
+      const engineWithRounding = new FormulaEngine({
+        defaultRounding: { mode: 'HALF_UP', precision: 2 }
+      });
+
+      const formulas: FormulaDefinition[] = [
+        { id: '_discount1', expression: '127.5 * 0.15', rounding: { mode: 'HALF_UP', precision: 2 } },
+        { id: '_discountTotal', expression: '$_discount1' },  // No per-formula rounding
+        { id: 'totalHt', expression: '127.5 - $_discountTotal' },
+      ];
+
+      const results = engineWithRounding.evaluateAll(formulas, { variables: {} }, {
+        disableIntermediateRounding: true
+      });
+
+      expect(results.success).toBe(true);
+      // Per-formula rounding is still applied
+      expect((results.results.get('_discount1')?.value as Decimal).toNumber()).toBe(19.13);
+      // But default rounding is disabled, so _discountTotal uses raw value from context
+      // which is the rounded 19.13 from the previous formula
+      expect((results.results.get('_discountTotal')?.value as Decimal).toNumber()).toBe(19.13);
+      expect((results.results.get('totalHt')?.value as Decimal).toNumber()).toBe(108.37);
+    });
+
+    it('should not apply defaultRounding when mode is NONE', () => {
+      const engineWithNoneRounding = new FormulaEngine({
+        defaultRounding: { mode: 'NONE', precision: 2 }
+      });
+
+      const formulas: FormulaDefinition[] = [
+        { id: '_discount1', expression: '127.5 * 0.15' },
+        { id: 'totalHt', expression: '127.5 - $_discount1' },
+      ];
+
+      const results = engineWithNoneRounding.evaluateAll(formulas, { variables: {} });
+
+      expect(results.success).toBe(true);
+      // NONE mode should not round
+      expect((results.results.get('_discount1')?.value as Decimal).toNumber()).toBe(19.125);
+      expect((results.results.get('totalHt')?.value as Decimal).toNumber()).toBe(108.375);
+    });
+
+    it('should match sequential evaluation when defaultRounding is configured', () => {
+      const engineWithRounding = new FormulaEngine({
+        defaultRounding: { mode: 'HALF_UP', precision: 2 }
+      });
+
+      const basePrice = 127.5;
+      const discountRate = 0.15;
+
+      // Sequential evaluation with manual rounding
+      const discount1 = new Decimal(basePrice).times(discountRate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+      const discountTotal = discount1;
+      const totalHtSequential = new Decimal(basePrice).minus(discountTotal).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
+
+      // Batch evaluation with defaultRounding
+      const formulas: FormulaDefinition[] = [
+        { id: '_discount1', expression: `${basePrice} * ${discountRate}` },
+        { id: '_discountTotal', expression: '$_discount1' },
+        { id: 'totalHt', expression: `${basePrice} - $_discountTotal` },
+      ];
+
+      const results = engineWithRounding.evaluateAll(formulas, { variables: {} });
+      const totalHtBatch = (results.results.get('totalHt')?.value as Decimal).toNumber();
+
+      // Sequential with rounding: 127.5 - 19.13 = 108.37
+      expect(totalHtSequential).toBe(108.37);
+
+      // Batch with defaultRounding should now match!
+      expect(totalHtBatch).toBe(108.37);
+      expect(totalHtSequential).toBe(totalHtBatch);
+    });
+
+    it('should handle complex financial chain with defaultRounding', () => {
+      const engineWithRounding = new FormulaEngine({
+        defaultRounding: { mode: 'HALF_UP', precision: 2 }
+      });
+
+      const formulas: FormulaDefinition[] = [
+        // Line item 1: quantity 3 at price 10.33
+        { id: 'line1_subtotal', expression: '3 * 10.33' },
+        { id: 'line1_tax', expression: '$line1_subtotal * 0.0825' },
+
+        // Line item 2: quantity 7 at price 5.67
+        { id: 'line2_subtotal', expression: '7 * 5.67' },
+        { id: 'line2_tax', expression: '$line2_subtotal * 0.0825' },
+
+        // Total tax uses rounded line item taxes
+        { id: 'totalTax', expression: '$line1_tax + $line2_tax' },
+
+        // Grand total
+        { id: 'grandTotal', expression: '$line1_subtotal + $line2_subtotal + $totalTax' },
+      ];
+
+      const results = engineWithRounding.evaluateAll(formulas, { variables: {} });
+
+      expect(results.success).toBe(true);
+
+      // All values properly rounded to 2 decimal places
+      expect((results.results.get('line1_subtotal')?.value as Decimal).toNumber()).toBe(30.99);
+      expect((results.results.get('line1_tax')?.value as Decimal).toNumber()).toBe(2.56);
+      expect((results.results.get('line2_subtotal')?.value as Decimal).toNumber()).toBe(39.69);
+      expect((results.results.get('line2_tax')?.value as Decimal).toNumber()).toBe(3.27);
+      expect((results.results.get('totalTax')?.value as Decimal).toNumber()).toBe(5.83);
+      expect((results.results.get('grandTotal')?.value as Decimal).toNumber()).toBe(76.51);
     });
   });
 

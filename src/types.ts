@@ -265,6 +265,19 @@ export interface EvaluationResultSet {
 }
 
 // ============================================================================
+// Batch Evaluation Options
+// ============================================================================
+
+export interface EvaluateAllOptions {
+  /**
+   * When true, disables automatic intermediate rounding even if defaultRounding
+   * is configured in the engine. Per-formula rounding configurations are still applied.
+   * @default false
+   */
+  disableIntermediateRounding?: boolean;
+}
+
+// ============================================================================
 // Validation Result
 // ============================================================================
 

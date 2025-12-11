@@ -4,6 +4,7 @@ import {
   EvaluationContext,
   EvaluationResult,
   EvaluationResultSet,
+  EvaluateAllOptions,
   ValidationResult,
   FunctionDefinition,
   ASTNode,
@@ -182,10 +183,15 @@ export class FormulaEngine {
 
   /**
    * Evaluate all formulas in dependency order
+   *
+   * @param formulas - Array of formula definitions to evaluate
+   * @param context - Evaluation context with variables
+   * @param options - Optional configuration for batch evaluation
    */
   evaluateAll(
     formulas: FormulaDefinition[],
-    context: EvaluationContext
+    context: EvaluationContext,
+    options?: EvaluateAllOptions
   ): EvaluationResultSet {
     const startTime = Date.now();
     const results = new Map<string, EvaluationResult>();
@@ -211,6 +217,12 @@ export class FormulaEngine {
       formulaMap.set(formula.id, formula);
     }
 
+    // Determine if intermediate rounding should be applied
+    const applyIntermediateRounding =
+      this.config.defaultRounding &&
+      this.config.defaultRounding.mode !== 'NONE' &&
+      !options?.disableIntermediateRounding;
+
     // Evaluate in order, merging results into context
     const workingContext: EvaluationContext = this.normalizeContext(context);
 
@@ -221,10 +233,16 @@ export class FormulaEngine {
       try {
         const result = this.evaluator.evaluate(formula.expression, workingContext);
 
-        // Apply rounding if configured
+        // Apply rounding: per-formula config takes precedence, then defaultRounding
         let value = result.value;
-        if (formula.rounding && this.isDecimal(value)) {
-          value = this.applyRounding(value as Decimal, formula.rounding);
+        if (this.isDecimal(value)) {
+          if (formula.rounding) {
+            // Per-formula rounding always takes precedence
+            value = this.applyRounding(value as Decimal, formula.rounding);
+          } else if (applyIntermediateRounding) {
+            // Apply default rounding to intermediate values
+            value = this.applyRounding(value as Decimal, this.config.defaultRounding!);
+          }
         }
 
         // Handle errors based on formula config
