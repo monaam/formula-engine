@@ -746,6 +746,155 @@ export function createBuiltInFunctions(decimalUtils: DecimalUtils): Map<string, 
     },
   };
 
+  // ============================================================================
+  // Table/Lookup Functions
+  // ============================================================================
+
+  const LOOKUP: FunctionDefinition = {
+    name: 'LOOKUP',
+    minArgs: 3,
+    maxArgs: 3,
+    returnType: 'any',
+    description: 'Multi-criteria exact-match lookup on array of objects',
+    implementation: (args) => {
+      const table = args[0];
+      const criteria = args[1];
+      const returnField = args[2];
+
+      if (table === null || table === undefined) {
+        return 0;
+      }
+
+      if (!Array.isArray(table)) {
+        throw new TypeMismatchError('array', typeof table, 'LOOKUP');
+      }
+
+      if (typeof criteria !== 'object' || criteria === null || Array.isArray(criteria)) {
+        throw new TypeMismatchError('object', typeof criteria, 'LOOKUP criteria');
+      }
+
+      if (typeof returnField !== 'string') {
+        throw new TypeMismatchError('string', typeof returnField, 'LOOKUP returnField');
+      }
+
+      const criteriaObj = criteria as Record<string, unknown>;
+
+      for (const row of table) {
+        if (typeof row !== 'object' || row === null) continue;
+        const rowObj = row as Record<string, unknown>;
+
+        let match = true;
+        for (const [key, value] of Object.entries(criteriaObj)) {
+          const rowVal = rowObj[key];
+          if (rowVal instanceof Decimal && value instanceof Decimal) {
+            if (!rowVal.equals(value)) {
+              match = false;
+              break;
+            }
+          } else if (rowVal instanceof Decimal) {
+            if (typeof value === 'number' && rowVal.toNumber() === value) continue;
+            if (typeof value === 'string' && rowVal.toString() === value) continue;
+            match = false;
+            break;
+          } else if (value instanceof Decimal) {
+            if (typeof rowVal === 'number' && value.toNumber() === rowVal) continue;
+            if (typeof rowVal === 'string' && value.toString() === rowVal) continue;
+            match = false;
+            break;
+          } else if (rowVal !== value) {
+            match = false;
+            break;
+          }
+        }
+
+        if (match) {
+          const result = rowObj[returnField];
+          return result !== undefined ? result : 0;
+        }
+      }
+
+      return 0;
+    },
+  };
+
+  const RANGE: FunctionDefinition = {
+    name: 'RANGE',
+    minArgs: 5,
+    maxArgs: 5,
+    returnType: 'any',
+    description: 'Numeric band/tier resolution: min <= inputValue < max',
+    implementation: (args) => {
+      const table = args[0];
+      const inputValue = args[1];
+      const minField = args[2];
+      const maxField = args[3];
+      const returnField = args[4];
+
+      if (table === null || table === undefined) {
+        return 0;
+      }
+
+      if (!Array.isArray(table)) {
+        throw new TypeMismatchError('array', typeof table, 'RANGE');
+      }
+
+      if (typeof minField !== 'string') {
+        throw new TypeMismatchError('string', typeof minField, 'RANGE minField');
+      }
+      if (typeof maxField !== 'string') {
+        throw new TypeMismatchError('string', typeof maxField, 'RANGE maxField');
+      }
+      if (typeof returnField !== 'string') {
+        throw new TypeMismatchError('string', typeof returnField, 'RANGE returnField');
+      }
+
+      let inputNum: number;
+      if (inputValue instanceof Decimal) {
+        inputNum = inputValue.toNumber();
+      } else if (typeof inputValue === 'number') {
+        inputNum = inputValue;
+      } else {
+        throw new TypeMismatchError('number', typeof inputValue, 'RANGE inputValue');
+      }
+
+      for (const row of table) {
+        if (typeof row !== 'object' || row === null) continue;
+        const rowObj = row as Record<string, unknown>;
+
+        const minVal = rowObj[minField];
+        const maxVal = rowObj[maxField];
+
+        let minNum: number;
+        if (minVal instanceof Decimal) {
+          minNum = minVal.toNumber();
+        } else if (typeof minVal === 'number') {
+          minNum = minVal;
+        } else {
+          continue;
+        }
+
+        if (inputNum < minNum) continue;
+
+        if (maxVal !== null && maxVal !== undefined) {
+          let maxNum: number;
+          if (maxVal instanceof Decimal) {
+            maxNum = maxVal.toNumber();
+          } else if (typeof maxVal === 'number') {
+            maxNum = maxVal;
+          } else {
+            continue;
+          }
+          if (inputNum >= maxNum) continue;
+        }
+
+        const result = rowObj[returnField];
+        return result !== undefined ? result : 0;
+      }
+
+      return 0;
+    },
+  };
+
   // Register all functions
   const allFunctions = [
     // Math
@@ -760,6 +909,8 @@ export function createBuiltInFunctions(decimalUtils: DecimalUtils): Map<string, 
     NUMBER, STRING, BOOLEAN, TYPEOF,
     // Array
     FIRST, LAST, REVERSE, SLICE, INCLUDES, INDEXOF, FLATTEN,
+    // Table/Lookup
+    LOOKUP, RANGE,
   ];
 
   for (const fn of allFunctions) {

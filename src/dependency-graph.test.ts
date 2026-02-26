@@ -57,6 +57,30 @@ describe('DependencyExtractor', () => {
     expect(deps).toEqual(new Set(['a']));
     expect(deps.size).toBe(1);
   });
+
+  it('should extract dependencies from object literal values', () => {
+    const deps = extractor.extract('LOOKUP($table, { region: $region, zone: $zone }, "rate")');
+
+    expect(deps).toEqual(new Set(['table', 'region', 'zone']));
+  });
+
+  it('should not extract dependencies from object with only literals', () => {
+    const deps = extractor.extract('{ a: 1, b: "x" }');
+
+    expect(deps).toEqual(new Set());
+  });
+
+  it('should extract dependencies from nested object literals', () => {
+    const deps = extractor.extract('{ inner: { val: $x } }');
+
+    expect(deps).toEqual(new Set(['x']));
+  });
+
+  it('should extract dependencies from object literal with expressions', () => {
+    const deps = extractor.extract('{ total: $a + $b, name: "test" }');
+
+    expect(deps).toEqual(new Set(['a', 'b']));
+  });
 });
 
 describe('DependencyGraph', () => {

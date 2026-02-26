@@ -657,4 +657,536 @@ describe('FormulaEngine', () => {
       expect(result.value).toBe('Value: 42');
     });
   });
+
+  // ==========================================================================
+  // Object Literals
+  // ==========================================================================
+
+  describe('Object Literals', () => {
+    it('should evaluate simple object literal', () => {
+      const result = engine.evaluate('{ a: 1, b: 2 }', { variables: {} });
+
+      expect(result.success).toBe(true);
+      const obj = result.value as Record<string, any>;
+      expect((obj.a as Decimal).toNumber()).toBe(1);
+      expect((obj.b as Decimal).toNumber()).toBe(2);
+    });
+
+    it('should evaluate object literal with variable values', () => {
+      const result = engine.evaluate('{ price: $p, qty: $q }', {
+        variables: { p: 10, q: 5 },
+      });
+
+      expect(result.success).toBe(true);
+      const obj = result.value as Record<string, any>;
+      expect((obj.price as Decimal).toNumber()).toBe(10);
+      expect((obj.qty as Decimal).toNumber()).toBe(5);
+    });
+
+    it('should evaluate empty object literal', () => {
+      const result = engine.evaluate('{}', { variables: {} });
+
+      expect(result.success).toBe(true);
+      expect(result.value).toEqual({});
+    });
+
+    it('should evaluate object literal with expression values', () => {
+      const result = engine.evaluate('{ total: $a + $b }', {
+        variables: { a: 10, b: 20 },
+      });
+
+      expect(result.success).toBe(true);
+      const obj = result.value as Record<string, any>;
+      expect((obj.total as Decimal).toNumber()).toBe(30);
+    });
+
+    it('should evaluate object literal with context variables', () => {
+      const result = engine.evaluate('{ zone: @zone }', {
+        variables: {},
+        extra: { zone: 'A' },
+      });
+
+      expect(result.success).toBe(true);
+      const obj = result.value as Record<string, any>;
+      expect(obj.zone).toBe('A');
+    });
+
+    it('should evaluate object literal with mixed value types', () => {
+      const result = engine.evaluate('{ name: "test", count: 42, active: true, data: null }', {
+        variables: {},
+      });
+
+      expect(result.success).toBe(true);
+      const obj = result.value as Record<string, any>;
+      expect(obj.name).toBe('test');
+      expect((obj.count as Decimal).toNumber()).toBe(42);
+      expect(obj.active).toBe(true);
+      expect(obj.data).toBe(null);
+    });
+  });
+
+  // ==========================================================================
+  // LOOKUP Function
+  // ==========================================================================
+
+  describe('LOOKUP Function', () => {
+    const taxRates = [
+      { region: 'US', category: 'electronics', rate: 0.08 },
+      { region: 'US', category: 'food', rate: 0.02 },
+      { region: 'EU', category: 'electronics', rate: 0.20 },
+      { region: 'EU', category: 'food', rate: 0.10 },
+    ];
+
+    // --- Basic scenarios ---
+
+    it('should find matching row with single criteria', () => {
+      const shopRates = [
+        { class: 'A', redevance: 100 },
+        { class: 'B', redevance: 200 },
+        { class: 'C', redevance: 300 },
+      ];
+      const result = engine.evaluate(
+        'LOOKUP($table, { class: "B" }, "redevance")',
+        { variables: { table: shopRates } }
+      );
+
+      expect(result.success).toBe(true);
+      // Table data numbers are auto-converted to Decimal by normalizeContext
+      expect((result.value as Decimal).toNumber()).toBe(200);
+    });
+
+    it('should find matching row with multi-dimension criteria', () => {
+      const result = engine.evaluate(
+        'LOOKUP($table, { region: "EU", category: "food" }, "rate")',
+        { variables: { table: taxRates } }
+      );
+
+      expect(result.success).toBe(true);
+      expect((result.value as Decimal).toNumber()).toBe(0.10);
+    });
+
+    it('should return string field value', () => {
+      const data = [
+        { code: 'A', label: 'Alpha' },
+        { code: 'B', label: 'Beta' },
+      ];
+      const result = engine.evaluate(
+        'LOOKUP($data, { code: "B" }, "label")',
+        { variables: { data } }
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.value).toBe('Beta');
+    });
+
+    it('should return numeric field value', () => {
+      const result = engine.evaluate(
+        'LOOKUP($table, { region: "US", category: "electronics" }, "rate")',
+        { variables: { table: taxRates } }
+      );
+
+      expect(result.success).toBe(true);
+      expect((result.value as Decimal).toNumber()).toBe(0.08);
+    });
+
+    // --- Edge cases ---
+
+    it('should return 0 when no match found', () => {
+      const result = engine.evaluate(
+        'LOOKUP($table, { region: "JP", category: "electronics" }, "rate")',
+        { variables: { table: taxRates } }
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.value).toBe(0);
+    });
+
+    it('should return 0 for null table', () => {
+      const result = engine.evaluate(
+        'LOOKUP(null, { region: "US" }, "rate")',
+        { variables: {} }
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.value).toBe(0);
+    });
+
+    it('should return 0 for undefined table variable (non-strict)', () => {
+      const lenientEngine = new FormulaEngine({ strictMode: false });
+      const result = lenientEngine.evaluate(
+        'LOOKUP($table, { region: "US" }, "rate")',
+        { variables: {} }
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.value).toBe(0);
+    });
+
+    it('should return first match when multiple rows match', () => {
+      const data = [
+        { type: 'X', value: 'first' },
+        { type: 'X', value: 'second' },
+      ];
+      const result = engine.evaluate(
+        'LOOKUP($data, { type: "X" }, "value")',
+        { variables: { data } }
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.value).toBe('first');
+    });
+
+    it('should match first row with empty criteria', () => {
+      const data = [
+        { a: 1, b: 'first' },
+        { a: 2, b: 'second' },
+      ];
+      const result = engine.evaluate(
+        'LOOKUP($data, {}, "b")',
+        { variables: { data } }
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.value).toBe('first');
+    });
+
+    it('should return 0 when returnField is missing from matched row', () => {
+      const data = [
+        { type: 'A', name: 'Alpha' },
+      ];
+      const result = engine.evaluate(
+        'LOOKUP($data, { type: "A" }, "nonexistent")',
+        { variables: { data } }
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.value).toBe(0);
+    });
+
+    it('should return 0 for empty table', () => {
+      const result = engine.evaluate(
+        'LOOKUP($table, { region: "US" }, "rate")',
+        { variables: { table: [] } }
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.value).toBe(0);
+    });
+
+    it('should ignore extra fields in table rows', () => {
+      const data = [
+        { type: 'A', extra1: 'ignore', extra2: 999, value: 42 },
+      ];
+      const result = engine.evaluate(
+        'LOOKUP($data, { type: "A" }, "value")',
+        { variables: { data } }
+      );
+
+      expect(result.success).toBe(true);
+      expect((result.value as Decimal).toNumber()).toBe(42);
+    });
+
+    it('should work with criteria from context variables', () => {
+      const result = engine.evaluate(
+        'LOOKUP($table, { region: @region, category: @category }, "rate")',
+        {
+          variables: { table: taxRates },
+          extra: { region: 'EU', category: 'electronics' },
+        }
+      );
+
+      expect(result.success).toBe(true);
+      expect((result.value as Decimal).toNumber()).toBe(0.20);
+    });
+
+    // --- Real-world scenario ---
+
+    it('should handle cafe coefficient lookup (4 dimensions)', () => {
+      const cafeCoefficients = [
+        { type: 'Cafe', equipment: 'TV', zone: '1', service: 'standard', redevance: 120.50 },
+        { type: 'Cafe', equipment: 'TV', zone: '2', service: 'standard', redevance: 95.30 },
+        { type: 'Cafe', equipment: 'Radio', zone: '1', service: 'standard', redevance: 60.00 },
+        { type: 'Restaurant', equipment: 'TV', zone: '1', service: 'standard', redevance: 200.00 },
+        { type: 'Cafe', equipment: 'TV', zone: '1', service: 'premium', redevance: 180.75 },
+      ];
+      const result = engine.evaluate(
+        'LOOKUP(@tenant.cafeCoefficients, { type: @client.type, equipment: @client.equipment, zone: @client.zone, service: @client.service }, "redevance")',
+        {
+          variables: {},
+          extra: {
+            tenant: { cafeCoefficients },
+            client: { type: 'Cafe', equipment: 'TV', zone: '2', service: 'standard' },
+          },
+        }
+      );
+
+      expect(result.success).toBe(true);
+      // Context extra values are NOT auto-converted to Decimal, so raw number is returned
+      expect(result.value).toBe(95.30);
+    });
+  });
+
+  // ==========================================================================
+  // RANGE Function
+  // ==========================================================================
+
+  describe('RANGE Function', () => {
+    const tiers = [
+      { min: 0, max: 1000, rate: 0.10 },
+      { min: 1000, max: 5000, rate: 0.15 },
+      { min: 5000, max: null, rate: 0.20 },
+    ];
+
+    // --- Basic scenarios ---
+
+    it('should match first tier', () => {
+      const result = engine.evaluate(
+        'RANGE($tiers, 500, "min", "max", "rate")',
+        { variables: { tiers } }
+      );
+
+      expect(result.success).toBe(true);
+      expect((result.value as Decimal).toNumber()).toBe(0.10);
+    });
+
+    it('should match middle tier', () => {
+      const result = engine.evaluate(
+        'RANGE($tiers, 2500, "min", "max", "rate")',
+        { variables: { tiers } }
+      );
+
+      expect(result.success).toBe(true);
+      expect((result.value as Decimal).toNumber()).toBe(0.15);
+    });
+
+    it('should match unbounded tier (null max)', () => {
+      const result = engine.evaluate(
+        'RANGE($tiers, 10000, "min", "max", "rate")',
+        { variables: { tiers } }
+      );
+
+      expect(result.success).toBe(true);
+      expect((result.value as Decimal).toNumber()).toBe(0.20);
+    });
+
+    // --- Boundary conditions ---
+
+    it('should match at inclusive min boundary', () => {
+      const result = engine.evaluate(
+        'RANGE($tiers, 1000, "min", "max", "rate")',
+        { variables: { tiers } }
+      );
+
+      expect(result.success).toBe(true);
+      expect((result.value as Decimal).toNumber()).toBe(0.15);
+    });
+
+    it('should not match at exclusive max boundary (falls to next tier)', () => {
+      // 5000 is the max of tier 2 (exclusive), and the min of tier 3 (inclusive)
+      const result = engine.evaluate(
+        'RANGE($tiers, 5000, "min", "max", "rate")',
+        { variables: { tiers } }
+      );
+
+      expect(result.success).toBe(true);
+      expect((result.value as Decimal).toNumber()).toBe(0.20);
+    });
+
+    it('should match value just below max boundary', () => {
+      const result = engine.evaluate(
+        'RANGE($tiers, 4999.99, "min", "max", "rate")',
+        { variables: { tiers } }
+      );
+
+      expect(result.success).toBe(true);
+      expect((result.value as Decimal).toNumber()).toBe(0.15);
+    });
+
+    it('should match at zero', () => {
+      const result = engine.evaluate(
+        'RANGE($tiers, 0, "min", "max", "rate")',
+        { variables: { tiers } }
+      );
+
+      expect(result.success).toBe(true);
+      expect((result.value as Decimal).toNumber()).toBe(0.10);
+    });
+
+    it('should match large value in unbounded tier', () => {
+      const result = engine.evaluate(
+        'RANGE($tiers, 999999, "min", "max", "rate")',
+        { variables: { tiers } }
+      );
+
+      expect(result.success).toBe(true);
+      expect((result.value as Decimal).toNumber()).toBe(0.20);
+    });
+
+    // --- Edge cases ---
+
+    it('should return 0 when value below all bands', () => {
+      const result = engine.evaluate(
+        'RANGE($tiers, -5, "min", "max", "rate")',
+        { variables: { tiers } }
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.value).toBe(0);
+    });
+
+    it('should return 0 for null table', () => {
+      const result = engine.evaluate(
+        'RANGE(null, 500, "min", "max", "rate")',
+        { variables: {} }
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.value).toBe(0);
+    });
+
+    it('should return 0 for undefined table variable (non-strict)', () => {
+      const lenientEngine = new FormulaEngine({ strictMode: false });
+      const result = lenientEngine.evaluate(
+        'RANGE($tiers, 500, "min", "max", "rate")',
+        { variables: {} }
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.value).toBe(0);
+    });
+
+    it('should return 0 for empty table', () => {
+      const result = engine.evaluate(
+        'RANGE($tiers, 500, "min", "max", "rate")',
+        { variables: { tiers: [] } }
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.value).toBe(0);
+    });
+
+    it('should return 0 when value above all bounded tiers', () => {
+      const boundedTiers = [
+        { min: 0, max: 100, rate: 0.05 },
+        { min: 100, max: 500, rate: 0.10 },
+      ];
+      const result = engine.evaluate(
+        'RANGE($tiers, 1000, "min", "max", "rate")',
+        { variables: { tiers: boundedTiers } }
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.value).toBe(0);
+    });
+
+    // --- Real-world scenarios ---
+
+    it('should resolve room price to reference price (5-tier table)', () => {
+      const roomPriceBands = [
+        { min: 0, max: 500, referencePrice: 350 },
+        { min: 500, max: 800, referencePrice: 700 },
+        { min: 800, max: 1500, referencePrice: 1250 },
+        { min: 1500, max: 3000, referencePrice: 2250 },
+        { min: 3000, max: null, referencePrice: 3000 },
+      ];
+
+      // Test various price points
+      const test = (price: number, expectedRef: number) => {
+        const result = engine.evaluate(
+          'RANGE($bands, $price, "min", "max", "referencePrice")',
+          { variables: { bands: roomPriceBands, price } }
+        );
+        expect(result.success).toBe(true);
+        expect((result.value as Decimal).toNumber()).toBe(expectedRef);
+      };
+
+      test(250, 350);    // First band
+      test(650, 700);    // Second band
+      test(1200, 1250);  // Third band
+      test(2000, 2250);  // Fourth band
+      test(5000, 3000);  // Unbounded band
+    });
+
+    it('should resolve tax bracket', () => {
+      const taxBrackets = [
+        { min: 0, max: 10000, taxRate: 0 },
+        { min: 10000, max: 25000, taxRate: 0.10 },
+        { min: 25000, max: 50000, taxRate: 0.20 },
+        { min: 50000, max: null, taxRate: 0.30 },
+      ];
+      const result = engine.evaluate(
+        'RANGE($brackets, 35000, "min", "max", "taxRate")',
+        { variables: { brackets: taxBrackets } }
+      );
+
+      expect(result.success).toBe(true);
+      expect((result.value as Decimal).toNumber()).toBe(0.20);
+    });
+  });
+
+  // ==========================================================================
+  // evaluateAll Integration with LOOKUP and RANGE
+  // ==========================================================================
+
+  describe('evaluateAll with LOOKUP and RANGE', () => {
+    it('should use LOOKUP result in downstream formula', () => {
+      const coefficients = [
+        { type: 'A', coeff: 1.5 },
+        { type: 'B', coeff: 2.0 },
+      ];
+
+      const formulas: FormulaDefinition[] = [
+        { id: 'coeff', expression: 'LOOKUP($coefficients, { type: $clientType }, "coeff")' },
+        { id: 'total', expression: '$base * $coeff' },
+      ];
+
+      const results = engine.evaluateAll(formulas, {
+        variables: { coefficients, clientType: 'B', base: 100 },
+      });
+
+      expect(results.success).toBe(true);
+      expect((results.results.get('coeff')?.value as Decimal).toNumber()).toBe(2.0);
+      expect((results.results.get('total')?.value as Decimal).toNumber()).toBe(200);
+    });
+
+    it('should use RANGE result in downstream formula', () => {
+      const bands = [
+        { min: 0, max: 100, multiplier: 1.0 },
+        { min: 100, max: null, multiplier: 1.5 },
+      ];
+
+      const formulas: FormulaDefinition[] = [
+        { id: 'multiplier', expression: 'RANGE($bands, $amount, "min", "max", "multiplier")' },
+        { id: 'result', expression: '$amount * $multiplier' },
+      ];
+
+      const results = engine.evaluateAll(formulas, {
+        variables: { bands, amount: 150 },
+      });
+
+      expect(results.success).toBe(true);
+      expect((results.results.get('multiplier')?.value as Decimal).toNumber()).toBe(1.5);
+      expect((results.results.get('result')?.value as Decimal).toNumber()).toBe(225);
+    });
+
+    it('should handle LOOKUP with no match defaulting to 0 in downstream formula', () => {
+      const data = [
+        { key: 'exists', value: 10 },
+      ];
+
+      const formulas: FormulaDefinition[] = [
+        { id: 'looked', expression: 'LOOKUP($data, { key: "missing" }, "value")' },
+        { id: 'total', expression: '$base + $looked' },
+      ];
+
+      const results = engine.evaluateAll(formulas, {
+        variables: { data, base: 100 },
+      });
+
+      expect(results.success).toBe(true);
+      // LOOKUP returns plain 0 on no match (not Decimal)
+      expect(results.results.get('looked')?.value).toBe(0);
+      expect((results.results.get('total')?.value as Decimal).toNumber()).toBe(100);
+    });
+  });
 });

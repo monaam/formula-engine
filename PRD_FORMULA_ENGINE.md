@@ -306,10 +306,13 @@ Term           := Factor (('*' | '/' | '%') Factor)*
 Factor         := Base ('^' Base)?
 Base           := Unary | Primary
 Unary          := ('-' | '!' | 'NOT') Base
-Primary        := Number | String | Boolean | Variable | FunctionCall | '(' Expression ')'
+Primary        := Number | String | Boolean | Variable | FunctionCall
+               | ObjectLiteral | '(' Expression ')'
 Variable       := '$' Identifier | '@' Identifier
 FunctionCall   := Identifier '(' Arguments? ')'
 Arguments      := Expression (',' Expression)*
+ObjectLiteral  := '{' (Property (',' Property)*)? '}'
+Property       := Identifier ':' Expression
 Identifier     := [a-zA-Z_][a-zA-Z0-9_]*
 ```
 
@@ -323,6 +326,7 @@ Identifier     := [a-zA-Z_][a-zA-Z0-9_]*
 | Boolean | `true`, `false` | Boolean values |
 | Null | `null` | Null/undefined value |
 | Array | `[1, 2, 3]` | Array literals |
+| Object | `{ key: expr, ... }` | Inline object literals with unquoted identifier keys |
 
 **Important:** By default, all numeric literals are parsed as `Decimal` for precision. Use the `f` suffix (e.g., `3.14f`) to explicitly use floating-point when performance is preferred over precision.
 
@@ -439,6 +443,56 @@ Example: `$quantity > 10 ? $unitPrice * 0.9 : $unitPrice`
 | `STRING(x)` | Convert to string | `STRING(42)` → `"42"` |
 | `BOOLEAN(x)` | Convert to boolean | `BOOLEAN(1)` → `true` |
 | `TYPEOF(x)` | Get type name | `TYPEOF(42)` → `"number"` |
+
+**Table/Lookup Functions:**
+
+| Function | Description | Example |
+|----------|-------------|---------|
+| `LOOKUP(table, criteria, returnField)` | Multi-criteria exact-match lookup | `LOOKUP($rates, { region: "US" }, "rate")` |
+| `RANGE(table, value, minField, maxField, returnField)` | Numeric band/tier resolution | `RANGE($tiers, $amount, "min", "max", "rate")` |
+
+**`LOOKUP(table, criteria, returnField)`** — Multi-criteria exact-match lookup on a collection of objects.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `table` | Array of objects | The reference dataset, typically from `@context` or `$variable` |
+| `criteria` | Object literal | Key-value pairs to match against each row (AND logic) |
+| `returnField` | String | The field name to return from the first matching row |
+
+Returns the value of `returnField` from the first row where every key in `criteria` equals the corresponding field in the row. Returns `0` if no match is found or if the table is null/undefined.
+
+```
+// Single-dimension lookup
+LOOKUP(@tenant.shopRates, { class: @client.shopClass }, "redevance")
+
+// Multi-dimension lookup (4 criteria)
+LOOKUP(@tenant.cafeCoefficients, {
+  type: @client.type,
+  equipment: @client.equipment,
+  zone: @client.zone,
+  service: @client.service
+}, "redevance")
+```
+
+**`RANGE(table, inputValue, minField, maxField, returnField)`** — Numeric band/tier resolution. Finds which range a value falls into and returns a field from the matching row.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `table` | Array of objects | The band/tier table |
+| `inputValue` | Number | The value to classify into a band |
+| `minField` | String | Field name for the lower bound (inclusive: `>=`) |
+| `maxField` | String | Field name for the upper bound (exclusive: `<`). `null` = unbounded. |
+| `returnField` | String | Field name to return from the matching row |
+
+Returns the value of `returnField` from the first row where `min <= inputValue < max`. Returns `0` if no match is found or if the table is null/undefined.
+
+```
+// Room price to reference price band
+RANGE(@tenant.roomPriceBands, @client.roomPrice, "min", "max", "referencePrice")
+
+// Tax bracket resolution
+RANGE($taxBrackets, $income, "min", "max", "taxRate")
+```
 
 ---
 

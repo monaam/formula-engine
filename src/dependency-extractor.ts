@@ -77,6 +77,12 @@ export class DependencyExtractor {
         }
         break;
 
+      case 'ObjectLiteral':
+        for (const prop of node.properties) {
+          this.visit(prop.value, dependencies);
+        }
+        break;
+
       // Literals don't have dependencies
       case 'DecimalLiteral':
       case 'NumberLiteral':

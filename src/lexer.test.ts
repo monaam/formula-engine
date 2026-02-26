@@ -285,4 +285,65 @@ describe('Lexer', () => {
       expect(() => lexer.tokenize()).toThrow(SyntaxError);
     });
   });
+
+  describe('Braces', () => {
+    it('should tokenize left brace', () => {
+      const lexer = new Lexer('{');
+      const tokens = lexer.tokenize();
+
+      expect(tokens[0].type).toBe(TokenType.LBRACE);
+      expect(tokens[0].value).toBe('{');
+    });
+
+    it('should tokenize right brace', () => {
+      const lexer = new Lexer('}');
+      const tokens = lexer.tokenize();
+
+      expect(tokens[0].type).toBe(TokenType.RBRACE);
+      expect(tokens[0].value).toBe('}');
+    });
+
+    it('should tokenize object literal tokens', () => {
+      const lexer = new Lexer('{ a: 1, b: 2 }');
+      const tokens = lexer.tokenize();
+
+      expect(tokens[0].type).toBe(TokenType.LBRACE);
+      expect(tokens[1].type).toBe(TokenType.IDENTIFIER);
+      expect(tokens[1].value).toBe('a');
+      expect(tokens[2].type).toBe(TokenType.COLON);
+      expect(tokens[3].type).toBe(TokenType.NUMBER);
+      expect(tokens[3].value).toBe('1');
+      expect(tokens[4].type).toBe(TokenType.COMMA);
+      expect(tokens[5].type).toBe(TokenType.IDENTIFIER);
+      expect(tokens[5].value).toBe('b');
+      expect(tokens[6].type).toBe(TokenType.COLON);
+      expect(tokens[7].type).toBe(TokenType.NUMBER);
+      expect(tokens[7].value).toBe('2');
+      expect(tokens[8].type).toBe(TokenType.RBRACE);
+      expect(tokens[9].type).toBe(TokenType.EOF);
+    });
+
+    it('should tokenize nested braces', () => {
+      const lexer = new Lexer('{ a: { b: 1 } }');
+      const tokens = lexer.tokenize();
+
+      expect(tokens[0].type).toBe(TokenType.LBRACE);
+      expect(tokens[3].type).toBe(TokenType.LBRACE);
+      expect(tokens[7].type).toBe(TokenType.RBRACE);
+      expect(tokens[8].type).toBe(TokenType.RBRACE);
+    });
+
+    it('should tokenize braces with variable values', () => {
+      const lexer = new Lexer('{ type: @client.type }');
+      const tokens = lexer.tokenize();
+
+      expect(tokens[0].type).toBe(TokenType.LBRACE);
+      expect(tokens[1].type).toBe(TokenType.IDENTIFIER);
+      expect(tokens[2].type).toBe(TokenType.COLON);
+      expect(tokens[3].type).toBe(TokenType.CONTEXT_VAR);
+      expect(tokens[4].type).toBe(TokenType.DOT);
+      expect(tokens[5].type).toBe(TokenType.IDENTIFIER);
+      expect(tokens[6].type).toBe(TokenType.RBRACE);
+    });
+  });
 });
