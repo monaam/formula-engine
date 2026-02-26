@@ -143,6 +143,16 @@ export interface ArrayLiteral {
   elements: ASTNode[];
 }
 
+export interface ObjectLiteralProperty {
+  key: string;
+  value: ASTNode;
+}
+
+export interface ObjectLiteral {
+  type: 'ObjectLiteral';
+  properties: ObjectLiteralProperty[];
+}
+
 export interface VariableReference {
   type: 'VariableReference';
   prefix: '$' | '@';
@@ -194,6 +204,7 @@ export type ASTNode =
   | BooleanLiteral
   | NullLiteral
   | ArrayLiteral
+  | ObjectLiteral
   | VariableReference
   | BinaryOperation
   | UnaryOperation
@@ -342,6 +353,8 @@ export enum TokenType {
   RPAREN = 'RPAREN',
   LBRACKET = 'LBRACKET',
   RBRACKET = 'RBRACKET',
+  LBRACE = 'LBRACE',
+  RBRACE = 'RBRACE',
   COMMA = 'COMMA',
   DOT = 'DOT',
   QUESTION = 'QUESTION',

@@ -35,6 +35,8 @@ export {
   BooleanLiteral,
   NullLiteral,
   ArrayLiteral,
+  ObjectLiteral,
+  ObjectLiteralProperty,
   VariableReference,
   BinaryOperation,
   UnaryOperation,

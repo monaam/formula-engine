@@ -75,13 +75,15 @@ export class Parser {
         return this.parseGroupedExpression();
       case TokenType.LBRACKET:
         return this.parseArrayLiteral();
+      case TokenType.LBRACE:
+        return this.parseObjectLiteral();
       case TokenType.MINUS:
       case TokenType.NOT:
         return this.parseUnaryExpression();
       default:
         throw new UnexpectedTokenError(
           String(token.value),
-          ['number', 'string', 'boolean', 'null', 'variable', 'identifier', '(', '[', '-', '!'],
+          ['number', 'string', 'boolean', 'null', 'variable', 'identifier', '(', '[', '{', '-', '!'],
           token.position
         );
     }
@@ -263,6 +265,43 @@ export class Parser {
     return {
       type: 'ArrayLiteral',
       elements,
+    };
+  }
+
+  private parseObjectLiteral(): ASTNode {
+    this.advance(); // consume '{'
+    const properties: { key: string; value: ASTNode }[] = [];
+
+    if (this.peek().type !== TokenType.RBRACE) {
+      do {
+        if (this.peek().type === TokenType.COMMA) {
+          this.advance();
+        }
+        // Key must be an identifier
+        const keyToken = this.peek();
+        if (keyToken.type !== TokenType.IDENTIFIER) {
+          throw new UnexpectedTokenError(
+            String(keyToken.value),
+            ['identifier (property name)'],
+            keyToken.position
+          );
+        }
+        const key = String(this.advance().value);
+
+        // Expect colon
+        this.expect(TokenType.COLON, ':');
+
+        // Value is any expression
+        const value = this.parseExpression(PRECEDENCE.LOWEST);
+        properties.push({ key, value });
+      } while (this.peek().type === TokenType.COMMA);
+    }
+
+    this.expect(TokenType.RBRACE, '}');
+
+    return {
+      type: 'ObjectLiteral',
+      properties,
     };
   }
 

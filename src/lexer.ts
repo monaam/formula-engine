@@ -110,6 +110,12 @@ export class Lexer {
       case ']':
         this.addToken(TokenType.RBRACKET, ']');
         break;
+      case '{':
+        this.addToken(TokenType.LBRACE, '{');
+        break;
+      case '}':
+        this.addToken(TokenType.RBRACE, '}');
+        break;
       case ',':
         this.addToken(TokenType.COMMA, ',');
         break;

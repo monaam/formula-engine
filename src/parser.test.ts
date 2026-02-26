@@ -346,4 +346,113 @@ describe('Parser', () => {
       expect(() => parser.parse('$a ? $b')).toThrow(UnexpectedTokenError);
     });
   });
+
+  describe('Object Literals', () => {
+    it('should parse empty object literal', () => {
+      const ast = parser.parse('{}');
+
+      expect(ast.type).toBe('ObjectLiteral');
+      expect((ast as any).properties).toHaveLength(0);
+    });
+
+    it('should parse single-property object literal', () => {
+      const ast = parser.parse('{ name: "test" }');
+
+      expect(ast.type).toBe('ObjectLiteral');
+      expect((ast as any).properties).toHaveLength(1);
+      expect((ast as any).properties[0].key).toBe('name');
+      expect((ast as any).properties[0].value.type).toBe('StringLiteral');
+      expect((ast as any).properties[0].value.value).toBe('test');
+    });
+
+    it('should parse multi-property object literal', () => {
+      const ast = parser.parse('{ a: 1, b: 2, c: 3 }');
+
+      expect(ast.type).toBe('ObjectLiteral');
+      expect((ast as any).properties).toHaveLength(3);
+      expect((ast as any).properties[0].key).toBe('a');
+      expect((ast as any).properties[1].key).toBe('b');
+      expect((ast as any).properties[2].key).toBe('c');
+    });
+
+    it('should parse object literal with expression values', () => {
+      const ast = parser.parse('{ total: $a + $b }');
+
+      expect(ast.type).toBe('ObjectLiteral');
+      expect((ast as any).properties[0].key).toBe('total');
+      expect((ast as any).properties[0].value.type).toBe('BinaryOperation');
+      expect((ast as any).properties[0].value.operator).toBe('+');
+    });
+
+    it('should parse object literal with context variable values', () => {
+      const ast = parser.parse('{ zone: @client.zone }');
+
+      expect(ast.type).toBe('ObjectLiteral');
+      expect((ast as any).properties[0].key).toBe('zone');
+      expect((ast as any).properties[0].value.type).toBe('MemberAccess');
+    });
+
+    it('should parse object literal with variable values', () => {
+      const ast = parser.parse('{ price: $unitPrice, qty: $quantity }');
+
+      expect(ast.type).toBe('ObjectLiteral');
+      expect((ast as any).properties).toHaveLength(2);
+      expect((ast as any).properties[0].value.type).toBe('VariableReference');
+      expect((ast as any).properties[0].value.name).toBe('unitPrice');
+      expect((ast as any).properties[1].value.type).toBe('VariableReference');
+      expect((ast as any).properties[1].value.name).toBe('quantity');
+    });
+
+    it('should parse nested object literals', () => {
+      const ast = parser.parse('{ inner: { x: 1 } }');
+
+      expect(ast.type).toBe('ObjectLiteral');
+      expect((ast as any).properties[0].key).toBe('inner');
+      expect((ast as any).properties[0].value.type).toBe('ObjectLiteral');
+      expect((ast as any).properties[0].value.properties[0].key).toBe('x');
+    });
+
+    it('should parse object literal as function argument', () => {
+      const ast = parser.parse('LOOKUP($t, { a: 1 }, "r")');
+
+      expect(ast.type).toBe('FunctionCall');
+      expect((ast as any).name).toBe('LOOKUP');
+      expect((ast as any).arguments).toHaveLength(3);
+      expect((ast as any).arguments[1].type).toBe('ObjectLiteral');
+      expect((ast as any).arguments[1].properties[0].key).toBe('a');
+    });
+
+    it('should parse object literal with boolean and null values', () => {
+      const ast = parser.parse('{ active: true, deleted: false, data: null }');
+
+      expect(ast.type).toBe('ObjectLiteral');
+      expect((ast as any).properties).toHaveLength(3);
+      expect((ast as any).properties[0].value.type).toBe('BooleanLiteral');
+      expect((ast as any).properties[1].value.type).toBe('BooleanLiteral');
+      expect((ast as any).properties[2].value.type).toBe('NullLiteral');
+    });
+
+    it('should parse object literal with array value', () => {
+      const ast = parser.parse('{ items: [1, 2, 3] }');
+
+      expect(ast.type).toBe('ObjectLiteral');
+      expect((ast as any).properties[0].value.type).toBe('ArrayLiteral');
+    });
+
+    it('should throw on missing colon in object literal', () => {
+      expect(() => parser.parse('{ a 1 }')).toThrow(UnexpectedTokenError);
+    });
+
+    it('should throw on non-identifier key', () => {
+      expect(() => parser.parse('{ 123: 1 }')).toThrow(UnexpectedTokenError);
+    });
+
+    it('should throw on string key', () => {
+      expect(() => parser.parse('{ "key": 1 }')).toThrow(UnexpectedTokenError);
+    });
+
+    it('should throw on unclosed brace', () => {
+      expect(() => parser.parse('{ a: 1')).toThrow(UnexpectedTokenError);
+    });
+  });
 });

@@ -97,6 +97,14 @@ export class Evaluator {
       case 'ArrayLiteral':
         return node.elements.map(el => this.evaluateNode(el, context));
 
+      case 'ObjectLiteral': {
+        const obj: Record<string, unknown> = {};
+        for (const prop of node.properties) {
+          obj[prop.key] = this.evaluateNode(prop.value, context);
+        }
+        return obj;
+      }
+
       case 'VariableReference':
         return this.evaluateVariable(node.prefix, node.name, context);
 
