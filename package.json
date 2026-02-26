@@ -1,6 +1,6 @@
 {
   "name": "@the-trybe/formula-engine",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "Configuration-driven expression evaluation system with dependency resolution and decimal precision",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
